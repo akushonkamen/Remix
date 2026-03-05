@@ -1,0 +1,5 @@
+{
+  "name": "AutoKnowledge Base",
+  "description": "A knowledge base that automatically scrapes web links, summarizes content using LLM, and organizes them into categories.",
+  "requestFramePermissions": []
+}
