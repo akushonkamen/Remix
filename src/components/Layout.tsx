@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LayoutDashboard, Database, Settings, Globe } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useLanguage } from '../i18n';
+import { SettingsModal } from './SettingsModal';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { language, setLanguage, t } = useLanguage();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-[#f5f5f5] font-sans text-gray-900">
@@ -19,7 +21,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         
         <nav className="flex-1 p-4 space-y-1">
           <NavItem icon={<LayoutDashboard size={20} />} label={t('dashboard')} active />
-          {/* Future nav items */}
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+          >
+            <Settings size={20} />
+            {t('settings') || 'Settings'}
+          </button>
         </nav>
 
         <div className="p-4 border-t border-gray-100 space-y-4">
@@ -63,6 +71,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </motion.div>
         </div>
       </main>
+
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }

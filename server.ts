@@ -52,26 +52,43 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id)
   );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
 `);
 
-// Seed default category if empty
-const count = db.prepare('SELECT count(*) as count FROM categories').get() as { count: number };
-if (count.count === 0) {
-  db.prepare('INSERT INTO categories (name) VALUES (?)').run('General');
+// Seed default settings
+const settingsCount = db.prepare('SELECT count(*) as count FROM settings').get() as { count: number };
+if (settingsCount.count === 0) {
+  const insert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
+  insert.run('openai_api_key', process.env.OPENAI_API_KEY || "sk-sxWGh4hWeExbe8sqZEkgBi4E9l8E53oaAaoYEzjxbzR5IOgk");
+  insert.run('openai_base_url', process.env.OPENAI_BASE_URL || "https://chatapi.littlewheat.com/v1");
+  insert.run('openai_model', "gpt-4o-mini");
 }
 
 // OpenAI Setup
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "sk-sxWGh4hWeExbe8sqZEkgBi4E9l8E53oaAaoYEzjxbzR5IOgk";
-// Use the base URL without /v1 if the SDK appends it, but usually custom proxies need the full path.
-// However, the error 404 <html> suggests we are hitting a wrong endpoint.
-// Let's try to be very specific.
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://chatapi.littlewheat.com/v1";
+let openai: OpenAI;
 
-const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY,
-  baseURL: OPENAI_BASE_URL,
-  defaultHeaders: { 'Content-Type': 'application/json' }
-});
+function initializeOpenAI() {
+  try {
+    const apiKey = (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
+    const baseURL = (db.prepare("SELECT value FROM settings WHERE key = 'openai_base_url'").get() as any)?.value;
+    
+    openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: baseURL,
+      defaultHeaders: { 'Content-Type': 'application/json' }
+    });
+    console.log('OpenAI client re-initialized');
+  } catch (e) {
+    console.error('Failed to initialize OpenAI client:', e);
+  }
+}
+
+// Initial load
+initializeOpenAI();
 
 // Multer Setup
 if (!fs.existsSync('uploads')) {
@@ -90,11 +107,53 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
+  // Settings API
+  app.get('/api/settings', (req, res) => {
+    try {
+      const settings = db.prepare('SELECT * FROM settings').all();
+      const settingsMap: Record<string, string> = {};
+      settings.forEach((s: any) => {
+        settingsMap[s.key] = s.value;
+      });
+      // Mask API key for security
+      if (settingsMap.openai_api_key) {
+        settingsMap.openai_api_key = settingsMap.openai_api_key.substring(0, 3) + '...' + settingsMap.openai_api_key.substring(settingsMap.openai_api_key.length - 4);
+      }
+      res.json(settingsMap);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch settings' });
+    }
+  });
+
+  app.post('/api/settings', (req, res) => {
+    const { openai_api_key, openai_base_url, openai_model } = req.body;
+    
+    try {
+      const update = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+      
+      if (openai_api_key && !openai_api_key.includes('...')) {
+        update.run('openai_api_key', openai_api_key);
+      }
+      if (openai_base_url) update.run('openai_base_url', openai_base_url);
+      if (openai_model) update.run('openai_model', openai_model);
+      
+      // Re-initialize OpenAI client
+      initializeOpenAI();
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
   // Helper: Process content with LLM
   async function processWithLLM(title: string, content: string, description: string = '', language: string = 'en') {
     // Get existing categories for context
     const existingCategories = db.prepare('SELECT name FROM categories').all() as { name: string }[];
     const categoryList = existingCategories.map(c => c.name).join(', ');
+    
+    // Get model from settings
+    const model = (db.prepare("SELECT value FROM settings WHERE key = 'openai_model'").get() as any)?.value || "gpt-4o-mini";
 
     const systemPrompt = language === 'zh' 
       ? `你是一个智能助手，负责为知识库总结内容。
@@ -122,7 +181,7 @@ async function startServer() {
 
     try {
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: model,
         temperature: 0.1,
         max_tokens: 2000,
         messages: [

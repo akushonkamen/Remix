@@ -10,7 +10,7 @@ interface KnowledgeContextType {
   addFileEntry: (file: File) => Promise<void>;
   addCategory: (name: string) => Promise<void>;
   updateEntryCategory: (id: number, categoryName: string) => Promise<void>;
-  refreshData: () => Promise<void>;
+  refreshData: (query?: string) => Promise<void>;
 }
 
 const KnowledgeContext = createContext<KnowledgeContextType | undefined>(undefined);
@@ -21,11 +21,11 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
   const { language } = useLanguage();
 
-  const refreshData = async () => {
+  const refreshData = async (query: string = '') => {
     // setLoading(true); // Don't block UI on refresh
     try {
       const [entriesRes, categoriesRes] = await Promise.all([
-        fetch('/api/entries'),
+        fetch(`/api/entries?q=${encodeURIComponent(query)}`),
         fetch('/api/categories')
       ]);
       const entriesData = await entriesRes.json();

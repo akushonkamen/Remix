@@ -1,14 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useKnowledge } from '../context';
 import { useLanguage } from '../i18n';
-import { ExternalLink, Tag, Calendar, Image as ImageIcon, FileText, Edit2, Check, X } from 'lucide-react';
+import { ExternalLink, Tag, Calendar, Image as ImageIcon, FileText, Edit2, Check, X, Search } from 'lucide-react';
 
 export function KnowledgeTable() {
-  const { entries, categories, updateEntryCategory } = useKnowledge();
+  const { entries, categories, updateEntryCategory, refreshData } = useKnowledge();
   const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editCategoryName, setEditCategoryName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      refreshData(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const filteredEntries = filterCategory === 'All' 
     ? entries 
@@ -28,13 +37,25 @@ export function KnowledgeTable() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-xl font-semibold">{t('knowledgeBase')}</h2>
-        <div className="flex gap-2">
+        
+        <div className="flex flex-1 sm:flex-none gap-2">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+          
           <select 
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
           >
             <option value="All">{t('allCategories')}</option>
             {categories.map(c => (
