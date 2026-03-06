@@ -39,6 +39,13 @@ const translations: Translations = {
   errorUrl: { en: 'URL is required', zh: '请输入网址' },
   errorFile: { en: 'Please select a file', zh: '请选择文件' },
   failedProcess: { en: 'Failed to process source. Please try again.', zh: '处理失败，请重试。' },
+  
+  // Actions
+  delete: { en: 'Delete', zh: '删除' },
+  cancel: { en: 'Cancel', zh: '取消' },
+  confirm: { en: 'Confirm', zh: '确认' },
+  confirmDelete: { en: 'Are you sure you want to delete this item?', zh: '确定要删除此项吗？' },
+  confirmDeleteCategory: { en: 'Are you sure you want to delete this category? All entries in this category will become uncategorized.', zh: '确定要删除此分类吗？该分类下的所有条目将变为未分类。' },
 };
 
 interface LanguageContextType {

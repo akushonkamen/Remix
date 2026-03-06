@@ -11,16 +11,16 @@ import fs from 'fs';
 import mammoth from 'mammoth';
 import { createRequire } from 'module';
 
-// const require = createRequire(import.meta.url);
-// let pdf: any;
-// let officeParser: any;
+const require = createRequire(import.meta.url);
+let pdf: any;
+let officeParser: any;
 
-// try {
-//   pdf = require('pdf-parse');
-//   officeParser = require('officeparser');
-// } catch (e) {
-//   console.error('Failed to load document parsers:', e);
-// }
+try {
+  pdf = require('pdf-parse');
+  officeParser = require('officeparser');
+} catch (e) {
+  console.error('Failed to load document parsers:', e);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,14 +59,11 @@ db.exec(`
   );
 `);
 
-// Seed default settings
-const settingsCount = db.prepare('SELECT count(*) as count FROM settings').get() as { count: number };
-if (settingsCount.count === 0) {
-  const insert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
-  insert.run('openai_api_key', process.env.OPENAI_API_KEY || "sk-sxWGh4hWeExbe8sqZEkgBi4E9l8E53oaAaoYEzjxbzR5IOgk");
-  insert.run('openai_base_url', process.env.OPENAI_BASE_URL || "https://chatapi.littlewheat.com/v1");
-  insert.run('openai_model', "gpt-4o-mini");
-}
+// Seed or Update settings
+const insert = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+insert.run('openai_api_key', "sk-sxWGh4hWeExbe8sqZEkgBi4E9l8E53oaAaoYEzjxbzR5IOgk");
+insert.run('openai_base_url', "https://chatapi.littlewheat.com/v1");
+insert.run('openai_model', "gpt-4o-mini");
 
 // OpenAI Setup
 let openai: OpenAI;
@@ -74,8 +71,18 @@ let openai: OpenAI;
 function initializeOpenAI() {
   try {
     const apiKey = (db.prepare("SELECT value FROM settings WHERE key = 'openai_api_key'").get() as any)?.value;
-    const baseURL = (db.prepare("SELECT value FROM settings WHERE key = 'openai_base_url'").get() as any)?.value;
+    let baseURL = (db.prepare("SELECT value FROM settings WHERE key = 'openai_base_url'").get() as any)?.value;
     
+    // Clean baseURL: trim whitespace and remove trailing slash if present
+    if (baseURL) {
+      baseURL = baseURL.trim();
+      while (baseURL.endsWith('/')) {
+        baseURL = baseURL.slice(0, -1);
+      }
+    }
+
+    console.log(`Initializing OpenAI with Base URL: '${baseURL}'`);
+
     openai = new OpenAI({
       apiKey: apiKey,
       baseURL: baseURL,
@@ -180,6 +187,7 @@ async function startServer() {
          }`;
 
     try {
+      console.log(`Sending request to OpenAI: Model=${model}, BaseURL=${openai.baseURL}`);
       const completion = await openai.chat.completions.create({
         model: model,
         temperature: 0.1,
@@ -254,12 +262,28 @@ async function startServer() {
   // Get all entries
   app.get('/api/entries', (req, res) => {
     try {
-      const entries = db.prepare(`
+      const { q } = req.query;
+      let query = `
         SELECT e.*, c.name as category_name 
         FROM entries e 
         LEFT JOIN categories c ON e.category_id = c.id 
-        ORDER BY e.created_at DESC
-      `).all();
+      `;
+      
+      const params: any[] = [];
+      
+      if (q) {
+        query += `
+          WHERE e.title LIKE ? 
+          OR e.summary LIKE ? 
+          OR c.name LIKE ?
+        `;
+        const searchPattern = `%${q}%`;
+        params.push(searchPattern, searchPattern, searchPattern);
+      }
+      
+      query += ` ORDER BY e.created_at DESC`;
+      
+      const entries = db.prepare(query).all(...params);
       res.json(entries);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch entries' });
@@ -285,6 +309,36 @@ async function startServer() {
       res.json({ success: true, category_name });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update entry' });
+    }
+  });
+
+  // Delete entry
+  app.delete('/api/entries/:id', (req, res) => {
+    const { id } = req.params;
+    try {
+      const result = db.prepare('DELETE FROM entries WHERE id = ?').run(id);
+      if (result.changes === 0) return res.status(404).json({ error: 'Entry not found' });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete entry' });
+    }
+  });
+
+  // Delete category
+  app.delete('/api/categories/:id', (req, res) => {
+    const { id } = req.params;
+    try {
+      // First, unlink any entries associated with this category
+      db.prepare('UPDATE entries SET category_id = NULL WHERE category_id = ?').run(id);
+      
+      // Then delete the category
+      const result = db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+      
+      if (result.changes === 0) return res.status(404).json({ error: 'Category not found' });
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete category' });
     }
   });
 
@@ -352,11 +406,10 @@ async function startServer() {
       let textContent = '';
       
       if (mimeType === 'application/pdf') {
-        throw new Error('PDF parsing temporarily disabled');
-        // if (!pdf) throw new Error('PDF parser not available');
-        // const dataBuffer = fs.readFileSync(filePath);
-        // const data = await pdf(dataBuffer);
-        // textContent = data.text;
+        if (!pdf) throw new Error('PDF parser not available');
+        const dataBuffer = fs.readFileSync(filePath);
+        const data = await pdf(dataBuffer);
+        textContent = data.text;
       } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { // docx
         const result = await mammoth.extractRawText({ path: filePath });
         textContent = result.value;
@@ -365,21 +418,19 @@ async function startServer() {
         mimeType === 'application/vnd.ms-powerpoint' || // ppt
         mimeType === 'application/msword' // doc
       ) {
-        throw new Error('Office parsing temporarily disabled');
-        // if (!officeParser) throw new Error('Office parser not available');
-        // // officeparser supports pptx, doc, etc.
-        // textContent = await officeParser.parseOfficeAsync(filePath);
+        if (!officeParser) throw new Error('Office parser not available');
+        // officeparser supports pptx, doc, etc.
+        textContent = await officeParser.parseOfficeAsync(filePath);
       } else if (mimeType === 'text/plain') {
         textContent = fs.readFileSync(filePath, 'utf-8');
       } else {
         // Try officeparser as fallback for other formats
-        throw new Error('Office parsing temporarily disabled');
-        // if (!officeParser) throw new Error('Office parser not available');
-        // try {
-        //   textContent = await officeParser.parseOfficeAsync(filePath);
-        // } catch (e) {
-        //   throw new Error('Unsupported file type');
-        // }
+        if (!officeParser) throw new Error('Office parser not available');
+        try {
+          textContent = await officeParser.parseOfficeAsync(filePath);
+        } catch (e) {
+          throw new Error('Unsupported file type');
+        }
       }
 
       const result = await processWithLLM(originalName, textContent, '', language);

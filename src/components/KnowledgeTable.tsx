@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useKnowledge } from '../context';
 import { useLanguage } from '../i18n';
-import { ExternalLink, Tag, Calendar, Image as ImageIcon, FileText, Edit2, Check, X, Search } from 'lucide-react';
+import { ExternalLink, Tag, Calendar, Image as ImageIcon, FileText, Edit2, Check, X, Search, Trash2 } from 'lucide-react';
 
 export function KnowledgeTable() {
-  const { entries, categories, updateEntryCategory, refreshData } = useKnowledge();
+  const { entries, categories, updateEntryCategory, deleteEntry, refreshData } = useKnowledge();
   const { t } = useLanguage();
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editCategoryName, setEditCategoryName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [deleteConfirmation, setDeleteConfirmation] = useState<number | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -35,8 +37,42 @@ export function KnowledgeTable() {
     setEditingId(null);
   };
 
+  const handleDelete = (id: number) => {
+    setDeleteConfirmation(id);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteConfirmation !== null) {
+      await deleteEntry(deleteConfirmation);
+      setDeleteConfirmation(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {deleteConfirmation !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2">{t('delete')}</h3>
+            <p className="text-gray-600 mb-6">{t('confirmDelete')}</p>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setDeleteConfirmation(null)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                {t('cancel')}
+              </button>
+              <button 
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                {t('confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-xl font-semibold">{t('knowledgeBase')}</h2>
         
@@ -124,16 +160,25 @@ export function KnowledgeTable() {
                     {new Date(entry.created_at).toLocaleDateString()}
                   </span>
                 </div>
-                {entry.url.startsWith('http') && (
-                  <a 
-                    href={entry.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-gray-400 hover:text-indigo-600 transition-colors"
+                <div className="flex items-center gap-2">
+                  {entry.url.startsWith('http') && (
+                    <a 
+                      href={entry.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-gray-400 hover:text-indigo-600 transition-colors"
+                    >
+                      <ExternalLink size={18} />
+                    </a>
+                  )}
+                  <button 
+                    onClick={() => handleDelete(entry.id)}
+                    className="text-gray-400 hover:text-red-600 transition-colors"
+                    title={t('delete')}
                   >
-                    <ExternalLink size={18} />
-                  </a>
-                )}
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
               
               <h3 className="text-lg font-semibold text-gray-900 mb-2 truncate" title={entry.title}>

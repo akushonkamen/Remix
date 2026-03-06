@@ -10,6 +10,8 @@ interface KnowledgeContextType {
   addFileEntry: (file: File) => Promise<void>;
   addCategory: (name: string) => Promise<void>;
   updateEntryCategory: (id: number, categoryName: string) => Promise<void>;
+  deleteEntry: (id: number) => Promise<void>;
+  deleteCategory: (id: number) => Promise<void>;
   refreshData: (query?: string) => Promise<void>;
 }
 
@@ -120,8 +122,34 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteEntry = async (id: number) => {
+    try {
+      const res = await fetch(`/api/entries/${id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Failed to delete entry');
+      await refreshData();
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  };
+
+  const deleteCategory = async (id: number) => {
+    try {
+      const res = await fetch(`/api/categories/${id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Failed to delete category');
+      await refreshData();
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  };
+
   return (
-    <KnowledgeContext.Provider value={{ entries, categories, loading, addEntry, addFileEntry, addCategory, updateEntryCategory, refreshData }}>
+    <KnowledgeContext.Provider value={{ entries, categories, loading, addEntry, addFileEntry, addCategory, updateEntryCategory, deleteEntry, deleteCategory, refreshData }}>
       {children}
     </KnowledgeContext.Provider>
   );
