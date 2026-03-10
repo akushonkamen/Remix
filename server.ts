@@ -139,11 +139,11 @@ async function startServer() {
       const update = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
       
       db.transaction(() => {
-        if (openai_api_key !== undefined && !openai_api_key.includes('...')) {
+        if (openai_api_key !== undefined && openai_api_key !== null && typeof openai_api_key === 'string' && !openai_api_key.includes('...')) {
           update.run('openai_api_key', openai_api_key);
         }
-        if (openai_base_url !== undefined) update.run('openai_base_url', openai_base_url);
-        if (openai_model !== undefined) update.run('openai_model', openai_model);
+        if (openai_base_url !== undefined && openai_base_url !== null) update.run('openai_base_url', openai_base_url);
+        if (openai_model !== undefined && openai_model !== null) update.run('openai_model', openai_model);
       })();
       
       // Re-initialize OpenAI client
@@ -354,7 +354,9 @@ async function startServer() {
       console.log(`Fetching URL: ${url}`);
       const response = await axios.get(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'Accept-Language': 'en-US,en;q=0.9',
         },
         timeout: 10000
       });
