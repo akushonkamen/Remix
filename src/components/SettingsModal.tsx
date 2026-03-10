@@ -49,10 +49,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           onClose();
         }, 1500);
       } else {
-        setMessage('Failed to save settings.');
+        const data = await res.json().catch(() => ({}));
+        setMessage(data.error || data.details || 'Failed to save settings.');
       }
-    } catch (error) {
-      setMessage('Error saving settings.');
+    } catch (error: any) {
+      setMessage(error.message || 'Error saving settings.');
     } finally {
       setLoading(false);
     }

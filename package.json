@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "dev:api": "tsx server.ts --api-only",
+    "dev:ui": "vite",
     "start": "node server.ts",
     "build": "vite build",
     "preview": "vite preview",

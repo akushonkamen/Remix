@@ -60,7 +60,7 @@ db.exec(`
 `);
 
 // Seed or Update settings
-const insert = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 insert.run('openai_api_key', "sk-sxWGh4hWeExbe8sqZEkgBi4E9l8E53oaAaoYEzjxbzR5IOgk");
 insert.run('openai_base_url', "https://chatapi.littlewheat.com/v1");
 insert.run('openai_model', "gpt-4o-mini");
@@ -138,18 +138,21 @@ async function startServer() {
     try {
       const update = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
       
-      if (openai_api_key && !openai_api_key.includes('...')) {
-        update.run('openai_api_key', openai_api_key);
-      }
-      if (openai_base_url) update.run('openai_base_url', openai_base_url);
-      if (openai_model) update.run('openai_model', openai_model);
+      db.transaction(() => {
+        if (openai_api_key !== undefined && !openai_api_key.includes('...')) {
+          update.run('openai_api_key', openai_api_key);
+        }
+        if (openai_base_url !== undefined) update.run('openai_base_url', openai_base_url);
+        if (openai_model !== undefined) update.run('openai_model', openai_model);
+      })();
       
       // Re-initialize OpenAI client
       initializeOpenAI();
       
       res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update settings' });
+    } catch (error: any) {
+      console.error('Failed to update settings:', error);
+      res.status(500).json({ error: 'Failed to update settings', details: error.message });
     }
   });
 
